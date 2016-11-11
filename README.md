@@ -1,3 +1,5 @@
+# Stateless [![Build status](https://ci.appveyor.com/api/projects/status/github/dotnet-state-machine/stateless?svg=true)](https://ci.appveyor.com/project/DotnetStateMachine/stateless/branch/master) [![NuGet Pre Release](https://img.shields.io/nuget/vpre/Stateless.svg)](https://www.nuget.org/packages/stateless) [![Join the chat at https://gitter.im/dotnet-state-machine/stateless](https://badges.gitter.im/dotnet-state-machine/stateless.svg)](https://gitter.im/dotnet-state-machine/stateless?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Stack Overflow](https://img.shields.io/badge/stackoverflow-tag-orange.svg)](http://stackoverflow.com/questions/tagged/stateless-state-machine)
+
 **Create *state machines* and lightweight *state machine-based workflows* directly in .NET code:**
 
 ```csharp
@@ -25,7 +27,7 @@ Assert.AreEqual(State.Ringing, phoneCall.State);
 
 This project, as well as the example above, was inspired by [Simple State Machine](http://simplestatemachine.codeplex.com/).
 
-##Features
+## Features
 
 Most standard state machine constructs are supported:
 
@@ -40,8 +42,9 @@ Some useful extensions are also provided:
  * Ability to store state externally (for example, in a property tracked by an ORM)
  * Parameterised triggers
  * Reentrant states
+ * Export to DOT graph
 
-###Hierarchical States
+### Hierarchical States
 
 In the example below, the `OnHold` state is a substate of the `Connected` state. This means that an `OnHold` call is still connected.
 
@@ -55,7 +58,7 @@ phoneCall.Configure(State.OnHold)
 
 In addition to the `StateMachine.State` property, which will report the precise current state, an `IsInState(State)` method is provided. `IsInState(State)` will take substates into account, so that if the example above was in the `OnHold` state, `IsInState(State.Connected)` would also evaluate to `true`.
 
-###Entry/Exit Events
+### Entry/Exit Events
 
 In the example, the `StartCallTimer()` method will be executed when a call is connected. The `StopCallTimer()` will be executed when call completes (by either hanging up or hurling the phone against the wall.)
 
@@ -63,9 +66,9 @@ The call can move between the `Connected` and `OnHold` states without the `Start
 
 Entry/Exit event handlers can be supplied with a parameter of type `Transition` that describes the trigger, source and destination states.
 
-###External State Storage
+### External State Storage
 
-Stateless has been designed with encapsulation within an ORM-ed domain model in mind. Some ORMs place requirements upon where mapped data may be stored. To this end, the `StateMachine` constructor can accept function arguments that will be used to read and write the state values:
+Stateless is designed to be embedded in various application models. For example, some ORMs place requirements upon where mapped data may be stored, and UI frameworks often require state to be stored in special "bindable" properties. To this end, the `StateMachine` constructor can accept function arguments that will be used to read and write the state values:
 
 ```csharp
 var stateMachine = new StateMachine<State, Trigger>(
@@ -75,11 +78,11 @@ var stateMachine = new StateMachine<State, Trigger>(
 
 In this example the state machine will use the `myState` object for state storage.
 
-###Introspection
+### Introspection
 
 The state machine can provide a list of the triggers than can be successfully fired within the current state via the `StateMachine.PermittedTriggers` property.
 
-###Guard Clauses
+### Guard Clauses
 
 The state machine will choose between multiple transitions based on guard clauses, e.g.:
 
@@ -91,7 +94,7 @@ phoneCall.Configure(State.OffHook)
 
 Guard clauses within a state must be mutually exclusive (multiple guard clauses cannot be valid at the same time.) Substates can override transitions by respecifying them, however substates cannot disallow transitions that are allowed by the superstate.
 
-###Parameterised Triggers
+### Parameterised Triggers
 
 Strongly-typed parameters can be assigned to triggers:
 
@@ -106,7 +109,7 @@ stateMachine.Fire(assignTrigger, "joe@example.com");
 
 Trigger parameters can be used to dynamically select the destination state using the `PermitDynamic()` configuration method.
 
-###Ignored Transitions and Reentrant States
+### Ignored Transitions and Reentrant States
 
 Firing a trigger that does not have an allowed transition associated with it will cause an exception to be thrown.
 
@@ -131,10 +134,58 @@ By default, triggers must be ignored explicitly. To override Stateless's default
 stateMachine.OnUnhandledTrigger((state, trigger) => { });
 ```
 
-##Project Goals
+### Export to DOT graph
 
-Stateless is a base for exploration of generic and functional programming to drive workflow in .NET.
+It can be useful to visualize state machines on runtime. With this approach the code is the authoritative source and state diagrams are by-products which are always up to date.
+ 
+```csharp
+phoneCall.Configure(State.OffHook)
+    .PermitIf(Trigger.CallDialed, State.Ringing, IsValidNumber);
+    
+string graph = phoneCall.ToDotGraph();
+```
+
+The `StateMachine.ToDotGraph()` method returns a string representation of the state machine in the [DOT graph language](https://en.wikipedia.org/wiki/DOT_(graph_description_language)), e.g.:
+
+```dot
+digraph {
+  OffHook -> Ringing [label="CallDialed [IsValidNumber]"];
+}
+```
+
+This can then be rendered by tools that support the DOT graph language, such as the [dot command line tool](http://www.graphviz.org/doc/info/command.html) from [graphviz.org](http://www.graphviz.org) or [viz.js](https://github.com/mdaines/viz.js). See http://www.webgraphviz.com for instant gratification.
+Command line example: `dot -T pdf -o phoneCall.pdf phoneCall.dot` to generate a PDF file.
+
+### Async triggers
+
+On platforms that provide `Task<T>`, the `StateMachine` supports `async` entry/exit actions and so-on:
+
+```csharp
+stateMachine.Configure(State.Assigned)
+    .OnEntryAsync(async () => await SendEmailToAssignee());
+```
+
+Asynchronous handlers must be registered using the `*Async()` methods in these cases.
+
+To fire a trigger that invokes asynchronous actions, the `FireAsync()` method must be used:
+
+```csharp
+await stateMachine.FireAsync(Trigger.Assigned);
+```
+
+**Note:** while `StateMachine` may be used _asynchronously_, it remains single-threaded and may not be used _concurrently_ by multiple threads.
+
+## Building
+
+[Visual Studio 2015 and .NET Core] are required to build this project.
+
+
+## Project Goals
 
 This page is an almost-complete description of Stateless, and its explicit aim is to remain minimal.
 
 Please use the issue tracker or the if you'd like to report problems or discuss features.
+
+(_Why the name? Stateless implements the set of rules regarding state transitions, but, at least when the delegate version of the constructor is used, doesn't maintain any internal state itself._)
+
+[Visual Studio 2015 and .NET Core]: https://www.microsoft.com/net/core
